@@ -19,7 +19,7 @@ export async function GET() {
     const age = Date.now() - Date.parse(state.checkedAt);
     if (age >= 0 && age < 60_000) {
       status = state.status === "ready" ? "ready" : "connecting";
-      if (status === "ready") publicUrl = origin(state.publicUrl);
+      publicUrl = origin(state.publicUrl);
     }
   } catch { /* The local tunnel is optional when deployed on a permanent domain. */ }
   const configured = origin(process.env.PUBLIC_APP_URL);
