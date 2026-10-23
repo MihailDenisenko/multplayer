@@ -56,7 +56,11 @@ try {
         } else {
           $failures++
           Publish-State 'connecting' $null $tunnelProcess.Id
-          if ($failures -ge 2) { Write-Host 'Public address is unavailable. Reconnecting...'; break }
+          # A transient HTTP failure does not mean the SSH forward is dead.
+          # Preserve the current session and let SSH keepalives decide when a reconnect is required.
+          if ($failures -eq 1 -or ($failures % 6) -eq 0) {
+            Write-Host "Public address health check failed ($failures attempt(s)). Keeping the existing tunnel..."
+          }
         }
         for ($waitSecond = 0; $waitSecond -lt 10 -and !(Test-Path $stopPath); $waitSecond++) { Start-Sleep -Seconds 1 }
       }
