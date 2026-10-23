@@ -46,19 +46,22 @@ export default function GameApp() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
-  // Восстанавливаем идентификаторы сразу; состояние догрузит устойчивый polling.
+  // Восстанавливаем идентификаторы; состояние догрузит устойчивый polling.
   useEffect(() => {
-    const requestedCode = new URL(window.location.href).searchParams.get("room")?.trim().toUpperCase() ?? "";
-    const validCode = /^[A-Z0-9]{6}$/.test(requestedCode) ? requestedCode : "";
-    setInviteCode(validCode);
-    const session = loadSession();
-    if (session && (!validCode || validCode === session.roomCode)) {
-      setToken(session.token);
-      setRoomCode(session.roomCode);
-    } else if (session && validCode !== session.roomCode) {
-      clearSession();
-    }
-    setLoading(false);
+    const timer = setTimeout(() => {
+      const requestedCode = new URL(window.location.href).searchParams.get("room")?.trim().toUpperCase() ?? "";
+      const validCode = /^[A-Z0-9]{6}$/.test(requestedCode) ? requestedCode : "";
+      setInviteCode(validCode);
+      const session = loadSession();
+      if (session && (!validCode || validCode === session.roomCode)) {
+        setToken(session.token);
+        setRoomCode(session.roomCode);
+      } else if (session && validCode !== session.roomCode) {
+        clearSession();
+      }
+      setLoading(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // Следующий запрос начинается только после завершения предыдущего.
