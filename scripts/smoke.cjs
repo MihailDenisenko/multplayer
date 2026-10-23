@@ -90,7 +90,40 @@ async function checkGame(direction) {
     }
   }
 }
+async function checkConcurrentHandoff() {
+  let code;
+  try {
+    const host = await request('/api/rooms', { name: 'Concurrent host', folds: 4, direction: 'cw' });
+    code = host.roomCode;
+    const players = [host];
+    for (let i = 1; i < 4; i++) {
+      players.push(await request('/api/rooms/join', { code, name: `Concurrent ${i}` }));
+    }
+    await request(`/api/rooms/${code}/start`, {}, host.token);
+    const statePath = p => `/api/rooms/${code}/state?token=${encodeURIComponent(p.token)}`;
+    const initial = await Promise.all(players.map(player => request(statePath(player))));
+    await Promise.all(players.map((player, index) => request(`/api/rooms/${code}/submit`, {
+      sheetId: initial[index].mySheet.sheetId,
+      questionText: 'Concurrent question?',
+      keyword: 'concurrent',
+    }, player.token)));
+    const handedOff = await Promise.all(players.map(player => request(statePath(player))));
+    assert.ok(handedOff.every(state => state.mySheet), 'Every player must receive a sheet after a concurrent handoff');
+    assert.ok(handedOff.every(state => state.mySheet.foldsDone === 1));
+    assert.equal(new Set(handedOff.map(state => state.mySheet.sheetId)).size, players.length);
+    assert.ok(handedOff.every((state, index) => state.mySheet.sheetId !== initial[index].mySheet.sheetId));
+    console.log('PASS concurrent handoff: every player receives a different active sheet');
+  } finally {
+    if (code) {
+      const db = new Client({ connectionString: process.env.DATABASE_URL });
+      await db.connect();
+      try { await db.query('DELETE FROM rooms WHERE code = $1', [code]); }
+      finally { await db.end(); }
+    }
+  }
+}
 async function main() {
+  await checkConcurrentHandoff();
   await checkGame('cw');
   await checkGame('ccw');
 }
