@@ -9,7 +9,7 @@ import ResultsScreen from "./ResultsScreen";
 import { apiFetchState, clearSession, loadSession, saveSession } from "@/lib/game/client";
 import type { StateResponseDTO } from "@/lib/game/types";
 
-const POLL_INTERVAL_MS = 1400;
+const POLL_INTERVAL_MS = 500;
 
 export default function GameApp() {
   const [inviteCode, setInviteCode] = useState("");
