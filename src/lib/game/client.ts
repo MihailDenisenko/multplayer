@@ -17,7 +17,7 @@ async function request(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await request(input, { ...init, signal: controller.signal });
+    return await fetch(input, { ...init, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError("Сервер не ответил вовремя. Проверяем состояние игры…");
