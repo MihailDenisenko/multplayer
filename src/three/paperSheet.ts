@@ -144,7 +144,7 @@ export class PaperSheet {
   }
 
   /** Анимация загиба верхней (только что записанной) части листа. Возвращает Promise. */
-  async playFold(snapshotContent: PaperVisibleContent, durationMs = 1200): Promise<void> {
+  async playFold(snapshotContent: PaperVisibleContent, durationMs = 650): Promise<void> {
     if (this.animating) return;
     this.animating = true;
 
@@ -209,7 +209,7 @@ export class PaperSheet {
   }
 
   /** Анимация "вылета" листка со стола (передача). dir: -1 влево, 1 вправо. */
-  async playPassOut(dir: 1 | -1, durationMs = 950): Promise<void> {
+  async playPassOut(dir: 1 | -1, durationMs = 500): Promise<void> {
     const start = this.group.position.clone();
     const startRot = this.group.rotation.z;
     await tween(durationMs, (t) => {
@@ -226,7 +226,7 @@ export class PaperSheet {
   }
 
   /** Анимация "прилёта" нового листка. dir: откуда он прилетает (-1 слева, 1 справа). */
-  async playPassIn(dir: 1 | -1, restPosition: THREE.Vector3, durationMs = 950): Promise<void> {
+  async playPassIn(dir: 1 | -1, restPosition: THREE.Vector3, durationMs = 500): Promise<void> {
     this.group.visible = true;
     this.foldsDone = 0;
     this.stackMesh.visible = false;
@@ -290,12 +290,30 @@ function easeInOutCubic(t: number): number {
 function tween(durationMs: number, onUpdate: (t: number) => void): Promise<void> {
   return new Promise((resolve) => {
     const start = performance.now();
+    let raf = 0;
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      onUpdate(1);
+      resolve();
+    };
+    const handleVisibility = () => {
+      if (document.hidden) finish();
+    };
     function step(now: number) {
+      if (finished) return;
       const t = Math.min(1, (now - start) / durationMs);
       onUpdate(t);
-      if (t < 1) requestAnimationFrame(step);
-      else resolve();
+      if (t < 1) raf = requestAnimationFrame(step);
+      else finish();
     }
-    requestAnimationFrame(step);
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    if (document.hidden) finish();
+    else raf = requestAnimationFrame(step);
   });
 }
