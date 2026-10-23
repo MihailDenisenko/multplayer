@@ -294,6 +294,7 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
   }
 
   const waitingName = state.waitingForName;
+  const waitingPlayerOffline = state.players.some((player) => player.name === waitingName && player.activity === "offline");
   const foldsLabel = state.mySheet ? `${state.mySheet.foldsDone} / ${state.room.folds}` : "ожидание листка";
 
   return (
@@ -353,7 +354,11 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500/30 border-t-amber-400" />
               <p className="text-amber-200">
-                {waitingName ? `Ожидание листка от ${waitingName}…` : "Ожидание листка…"}
+                {waitingPlayerOffline && waitingName
+                  ? `Соединение с ${waitingName} потеряно. Игра продолжится после подключения…`
+                  : waitingName
+                    ? `Ожидание листка от ${waitingName}…`
+                    : "Ожидание листка…"}
               </p>
               {state.queuedCount > 0 && (
                 <p className="text-xs text-amber-500/70">В очереди у вас ещё {state.queuedCount} лист(ов)</p>
