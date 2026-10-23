@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root { color-scheme: dark; }
+html { min-width: 320px; background: #070a08; }
+body { margin: 0; overflow-wrap: anywhere; }
+button, input[type="range"], input[type="checkbox"] { touch-action: manipulation; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 3px;
+}
+input[type="range"] { accent-color: #f59e0b; min-height: 36px; }
+input[type="checkbox"] { width: 20px; height: 20px; accent-color: #f59e0b; }
+.screen-shell { min-height: 100dvh; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.game-screen { height: var(--game-height, 100dvh); }
+.game-header { padding-top: max(12px, env(safe-area-inset-top)); }
+.game-controls { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
+  .screen-shell { padding-top: max(24px, env(safe-area-inset-top)); }
+  .screen-card { padding: 24px 18px; border-radius: 24px; }
+  .screen-card h1 { font-size: 30px; }
+  .screen-card button { min-height: 44px; }
+  .screen-card input:not([type="checkbox"]):not([type="range"]) { min-height: 46px; font-size: 16px; }
+  .game-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: #101b14; }
+  .game-scene { position: relative; inset: auto; grid-row: 2; min-height: 0; overflow: hidden; }
+  .game-header { position: relative; inset: auto; grid-row: 1; grid-column: 1; gap: 8px; flex-wrap: wrap; background: #101b14; }
+  .game-room-info { display: flex; flex: 1; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .game-room-info > div { margin: 0; }
+  .game-players { width: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; }
+  .game-players > * { flex-shrink: 0; min-height: 32px; }
+  .game-players button { min-width: 44px; }
+  .game-controls { position: relative; inset: auto; grid-row: 3; grid-column: 1; padding: 8px 10px max(10px, env(safe-area-inset-bottom)); }
+  .game-form { max-height: calc(var(--game-height, 100dvh) - 120px); overflow-y: auto; padding: 14px; border-radius: 20px; background: #1b140c; }
+  .game-form textarea { font-size: 16px; min-height: 76px; }
+  .game-form button { min-height: 48px; }
+  .results-paper { padding: 20px 18px; }
+  .results-navigation { width: 100%; max-width: 36rem; gap: 8px; }
+  .results-navigation button { flex: 1; min-width: 0; min-height: 48px; padding: 10px 8px; font-size: 14px; }
+}
