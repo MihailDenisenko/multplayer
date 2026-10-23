@@ -15,6 +15,10 @@ export class SceneManager {
   private lights: THREE.Light[] = [];
   private seatCards = new Map<number, SeatCard>();
   private paper: PaperSheet;
+  private queuedPaper: PaperSheet;
+  private queuedPaperRest = new THREE.Vector3(-0.62, -0.38, -1.05);
+  private queuedSheetCount = 0;
+  private queuedArrivalId = 0;
   private hands: HandAnimator;
   private style: SheetStyle;
   private clock = new THREE.Clock();
@@ -52,6 +56,12 @@ export class SceneManager {
     this.paper.group.rotation.x = -0.42;
     this.camera.add(this.paper.group);
 
+    this.queuedPaper = new PaperSheet(style, 0.52, 0.7);
+    this.queuedPaper.group.visible = false;
+    this.queuedPaper.group.position.copy(this.queuedPaperRest);
+    this.queuedPaper.group.rotation.z = -0.12;
+    this.camera.add(this.queuedPaper.group);
+
     this.hands = new HandAnimator(style);
     this.hands.group.position.set(0, -0.62, -0.55);
     this.camera.add(this.hands.group);
@@ -81,6 +91,11 @@ export class SceneManager {
     this.paperRest.set(0, mobile ? -0.08 : -0.56, -0.92);
     this.paper.group.position.copy(this.paperRest);
     this.paper.group.scale.setScalar(mobile ? Math.min(0.72, (w / h) * 0.9) : 1);
+    this.queuedPaperRest.set(mobile ? -0.44 : -0.62, mobile ? 0.04 : -0.38, -1.05);
+    if (this.queuedSheetCount > 0) {
+      this.queuedPaper.group.position.copy(this.queuedPaperRest);
+      this.queuedPaper.group.rotation.z = -0.12;
+    }
     this.hands.group.scale.setScalar(mobile ? 0.7 : 1);
     this.camera.updateProjectionMatrix();
   };
@@ -119,6 +134,7 @@ export class SceneManager {
     this.tableGroup = createTable(style);
     this.scene.add(this.tableGroup);
     this.paper.setStyle(style);
+    this.queuedPaper.setStyle(style);
     this.hands.setStyle(style);
   }
 
@@ -151,6 +167,42 @@ export class SceneManager {
 
   updateMySheetContent(content: PaperVisibleContent) {
     this.paper.drawContent(content);
+  }
+
+  setQueuedSheetCount(count: number, dir: 1 | -1) {
+    const nextCount = Math.max(0, count);
+    const previousCount = this.queuedSheetCount;
+    this.queuedSheetCount = nextCount;
+    const arrivalId = ++this.queuedArrivalId;
+
+    if (nextCount === 0) {
+      this.queuedPaper.group.visible = false;
+      return;
+    }
+
+    this.queuedPaper.drawContent({
+      firstAuthorLabel: null,
+      keywordLine: null,
+      helperLabel: `В очереди: ${nextCount}`,
+      draftLines: [],
+    });
+
+    if (nextCount <= previousCount) {
+      this.queuedPaper.group.visible = true;
+      this.queuedPaper.group.position.copy(this.queuedPaperRest);
+      this.queuedPaper.group.rotation.z = -0.12;
+      return;
+    }
+
+    const rest = this.queuedPaperRest.clone();
+    void this.queuedPaper.playPassIn(dir, rest, 420).then(() => {
+      if (this.disposed || this.queuedArrivalId !== arrivalId || this.queuedSheetCount === 0) {
+        this.queuedPaper.group.visible = false;
+        return;
+      }
+      this.queuedPaper.group.position.copy(this.queuedPaperRest);
+      this.queuedPaper.group.rotation.z = -0.12;
+    });
   }
 
   setHandState(state: HandState) {
@@ -191,6 +243,7 @@ export class SceneManager {
     window.removeEventListener("resize", this.resize);
     this.container.removeEventListener("pointermove", this.onPointerMove);
     this.paper.dispose();
+    this.queuedPaper.dispose();
     this.hands.dispose();
     for (const card of this.seatCards.values()) card.dispose();
     this.renderer.dispose();
