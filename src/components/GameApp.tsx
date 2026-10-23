@@ -6,10 +6,10 @@ import HomeScreen from "./HomeScreen";
 import WaitingRoom from "./WaitingRoom";
 import GameScreen from "./GameScreen";
 import ResultsScreen from "./ResultsScreen";
-import { apiFetchState, clearSession, loadSession, saveSession } from "@/lib/game/client";
+import { ApiError, apiFetchState, clearSession, loadSession, saveSession } from "@/lib/game/client";
 import type { StateResponseDTO } from "@/lib/game/types";
 
-const POLL_INTERVAL_MS = 1400;
+const POLL_INTERVAL_MS = 500;
 
 export default function GameApp() {
   const [inviteCode, setInviteCode] = useState("");
@@ -19,6 +19,7 @@ export default function GameApp() {
   const [state, setState] = useState<StateResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connectionLost, setConnectionLost] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const updateState = useCallback((next: StateResponseDTO) => {
@@ -45,46 +46,62 @@ export default function GameApp() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
-  // При загрузке страницы пробуем восстановить сессию из localStorage.
+  // Восстанавливаем идентификаторы; состояние догрузит устойчивый polling.
   useEffect(() => {
-    const requestedCode = new URL(window.location.href).searchParams.get("room")?.trim().toUpperCase() ?? "";
-    const validCode = /^[A-Z0-9]{6}$/.test(requestedCode) ? requestedCode : "";
     const timer = setTimeout(() => {
+      const requestedCode = new URL(window.location.href).searchParams.get("room")?.trim().toUpperCase() ?? "";
+      const validCode = /^[A-Z0-9]{6}$/.test(requestedCode) ? requestedCode : "";
       setInviteCode(validCode);
-    }, 0);
-    const session = loadSession();
-    if (!session || (validCode && validCode !== session.roomCode)) {
-      const t = setTimeout(() => setLoading(false), 0);
-      return () => { clearTimeout(timer); clearTimeout(t); };
-    }
-    apiFetchState(session.roomCode, session.token)
-      .then((s) => {
+      const session = loadSession();
+      if (session && (!validCode || validCode === session.roomCode)) {
         setToken(session.token);
         setRoomCode(session.roomCode);
-        setState(s);
-      })
-      .catch(() => {
+      } else if (session && validCode !== session.roomCode) {
         clearSession();
-      })
-      .finally(() => setLoading(false));
+      }
+      setLoading(false);
+    }, 0);
     return () => clearTimeout(timer);
   }, []);
 
-  // Поллинг состояния, пока есть активная сессия.
+  // Следующий запрос начинается только после завершения предыдущего.
   useEffect(() => {
     if (!token || !roomCode) return;
     let cancelled = false;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      apiFetchState(roomCode, token)
-        .then(next => { if (!cancelled) updateState(next); })
-        .catch(() => {
-          /* временная сетевая ошибка — проигнорируем, попробуем ещё раз */
-        });
-    }, POLL_INTERVAL_MS);
+    let sessionInvalid = false;
+
+    const poll = async () => {
+      try {
+        const next = await apiFetchState(roomCode, token);
+        if (!cancelled) {
+          updateState(next);
+          setConnectionLost(false);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.status !== null && [401, 403, 404].includes(error.status)) {
+          sessionInvalid = true;
+          clearSession();
+          setToken(null);
+          setRoomCode(null);
+          setState(null);
+          setConnectionLost(false);
+          setError(error.message);
+        } else {
+          setConnectionLost(true);
+        }
+      } finally {
+        if (!cancelled && !sessionInvalid) {
+          pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+        }
+      }
+    };
+
+    if (pollRef.current) clearTimeout(pollRef.current);
+    pollRef.current = setTimeout(poll, 0);
     return () => {
       cancelled = true;
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [token, roomCode, updateState]);
 
@@ -93,6 +110,7 @@ export default function GameApp() {
     setToken(newToken);
     setRoomCode(newRoomCode);
     setState(newState);
+    setConnectionLost(false);
     const url = new URL(window.location.href);
     url.searchParams.set("room", newRoomCode);
     window.history.replaceState(null, "", url);
@@ -105,6 +123,7 @@ export default function GameApp() {
     setState(null);
     setInviteCode("");
     setError(null);
+    setConnectionLost(false);
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
@@ -121,8 +140,24 @@ export default function GameApp() {
     );
   }
 
+  if (token && roomCode && !state) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-6 text-center text-white">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500/30 border-t-amber-400" />
+        <p className="text-lg font-semibold">Восстанавливаем игру {roomCode}…</p>
+        <p className="max-w-md text-sm text-slate-300">Сессия сохранена. Страница подключится автоматически, когда сервер снова станет доступен.</p>
+        <button type="button" onClick={handleLeave} className="rounded-lg border border-slate-600 px-4 py-2 text-sm hover:bg-slate-800">В главное меню</button>
+      </div>
+    );
+  }
+
   return (
     <>
+      {connectionLost && (
+        <div className="fixed left-1/2 top-14 z-50 -translate-x-1/2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black shadow-lg">
+          Соединение потеряно. Повторяем подключение…
+        </div>
+      )}
       {error && (
         <div className="fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg">
           {error}

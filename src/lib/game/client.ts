@@ -4,6 +4,29 @@
 import type { RoomDirection, RoomStyle, StateResponseDTO } from "./types";
 
 const STORAGE_KEY = "chepuha_session_v1";
+const REQUEST_TIMEOUT_MS = 10_000;
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number | null = null) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError("Сервер не ответил вовремя. Проверяем состояние игры…");
+    }
+    throw new ApiError("Соединение потеряно. Повторяем подключение…");
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 export interface SessionInfo {
   token: string;
@@ -34,7 +57,8 @@ export function clearSession() {
 async function parseJsonOrThrow(res: Response) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error ?? `Ошибка запроса (${res.status})`);
+    const message = typeof data?.error === "string" ? data.error : `Ошибка запроса (${res.status})`;
+    throw new ApiError(message, res.status);
   }
   return data;
 }
@@ -50,7 +74,7 @@ export interface CreateRoomParams {
 }
 
 export async function apiCreateRoom(params: CreateRoomParams) {
-  const res = await fetch("/api/rooms", {
+  const res = await request("/api/rooms", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -63,7 +87,7 @@ export async function apiCreateRoom(params: CreateRoomParams) {
 }
 
 export async function apiJoinRoom(params: { code: string; name: string; avatar: string | null }) {
-  const res = await fetch("/api/rooms/join", {
+  const res = await request("/api/rooms/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -76,14 +100,14 @@ export async function apiJoinRoom(params: { code: string; name: string; avatar: 
 }
 
 export async function apiFetchState(roomCode: string, token: string) {
-  const res = await fetch(`/api/rooms/${roomCode}/state?token=${encodeURIComponent(token)}`, {
+  const res = await request(`/api/rooms/${roomCode}/state?token=${encodeURIComponent(token)}`, {
     cache: "no-store",
   });
   return parseJsonOrThrow(res) as Promise<StateResponseDTO>;
 }
 
 export async function apiStartGame(roomCode: string, token: string) {
-  const res = await fetch(`/api/rooms/${roomCode}/start`, {
+  const res = await request(`/api/rooms/${roomCode}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
   });
@@ -98,7 +122,7 @@ export interface SubmitParams {
 }
 
 export async function apiSubmit(roomCode: string, token: string, params: SubmitParams) {
-  const res = await fetch(`/api/rooms/${roomCode}/submit`, {
+  const res = await request(`/api/rooms/${roomCode}/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
@@ -107,7 +131,7 @@ export async function apiSubmit(roomCode: string, token: string, params: SubmitP
 }
 
 export async function apiFetchResults(roomCode: string, token: string) {
-  const res = await fetch(`/api/rooms/${roomCode}/results?token=${encodeURIComponent(token)}`, {
+  const res = await request(`/api/rooms/${roomCode}/results?token=${encodeURIComponent(token)}`, {
     cache: "no-store",
   });
   return parseJsonOrThrow(res) as Promise<{
