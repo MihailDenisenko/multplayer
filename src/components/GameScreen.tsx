@@ -90,6 +90,10 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
     sceneRef.current?.updatePlayers(state.players);
   }, [state.players]);
 
+  useEffect(() => {
+    sceneRef.current?.setQueuedSheetCount(state.queuedCount, dirIn);
+  }, [state.queuedCount, dirIn]);
+
   const steps = useMemo(() => (stage ? stepsForStage(stage) : []), [stage]);
   const currentStep = steps[stepIndex];
 
@@ -153,6 +157,10 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
         // Синхронизируем стадию текущего листка с сервером.
         setStage(sheet.stage);
         setStepIndex(0);
+      } else if (sheet.sheetId === localSheetId && phase === "waiting") {
+        // Восстанавливаем форму, если локальная анимация была прервана фоновой вкладкой.
+        resetFormFor(sheet);
+        setPhase("form");
       } else if (sheet.sheetId !== localSheetId && phase === "waiting") {
         // Пока мы ждали — к нам прилетел новый листок.
         setPhase("animating");
@@ -181,7 +189,7 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
     const timer = setTimeout(synchronize, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.mySheet, phase]);
+  }, [state.mySheet, phase, localSheetId, stage, dirIn]);
 
   function notifyTyping() {
     const scene = sceneRef.current;
@@ -222,15 +230,6 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
       if (steps.includes("answer")) snapshotLines.push(`Ответ: ${answerText}`);
       if (steps.includes("question")) snapshotLines.push(`Вопрос: ${questionText}`);
 
-      if (scene) {
-        await scene.playFoldAnimation({
-          firstAuthorLabel,
-          keywordLine: null,
-          helperLabel: "",
-          draftLines: snapshotLines,
-        });
-      }
-
       const payload = {
         sheetId: localSheetId,
         answerText: steps.includes("answer") ? answerText : undefined,
@@ -238,19 +237,30 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
         keyword: steps.includes("keyword") ? keywordText : undefined,
       };
 
-      if (scene && stage !== "final_answer") {
-        scene.updateMySheetContent({
-          firstAuthorLabel: null,
-          keywordLine: keywordText,
-          helperLabel: "Передаём листок соседу…",
-          draftLines: [],
-        });
-      }
+      // Отправка не должна ждать requestAnimationFrame: браузеры приостанавливают
+      // анимации фоновых вкладок, из-за чего листок раньше мог не уйти на сервер.
+      const submitPromise = apiSubmit(state.room.code, token, payload);
+      const animationPromise = scene
+        ? (async () => {
+            await scene.playFoldAnimation({
+              firstAuthorLabel,
+              keywordLine: null,
+              helperLabel: "",
+              draftLines: snapshotLines,
+            });
+            if (stage !== "final_answer") {
+              scene.updateMySheetContent({
+                firstAuthorLabel: null,
+                keywordLine: keywordText,
+                helperLabel: "Передаём листок соседу…",
+                draftLines: [],
+              });
+            }
+            await scene.playPassOutAnimation(dirOut);
+          })()
+        : Promise.resolve();
 
-      const [resp] = await Promise.all([
-        apiSubmit(state.room.code, token, payload),
-        scene ? scene.playPassOutAnimation(dirOut) : Promise.resolve(),
-      ]);
+      const [resp] = await Promise.all([submitPromise, animationPromise]);
 
       onState(resp.state);
       if (resp.state.finished) return;
@@ -366,6 +376,9 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
                   <span>
                     Ключевое слово: <b className="text-amber-200">{keyword}</b>
                   </span>
+                )}
+                {state.queuedCount > 0 && (
+                  <span className="text-sky-300">Рядом ждёт листок: {state.queuedCount}</span>
                 )}
               </div>
               <label htmlFor="game-answer" className="mb-2 block text-sm font-semibold text-amber-100">{STEP_LABEL[currentStep]}</label>
