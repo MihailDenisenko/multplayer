@@ -23,7 +23,7 @@ export async function GET() {
     }
   } catch { /* The local tunnel is optional when deployed on a permanent domain. */ }
   const configured = origin(process.env.PUBLIC_APP_URL);
-  if (!publicUrl && configured && !/\.(lhr\.life|trycloudflare\.com)$/.test(new URL(configured).hostname)) {
+  if (configured && !/\.(lhr\.life|trycloudflare\.com)$/.test(new URL(configured).hostname)) {
     publicUrl = configured;
     status = "ready";
   }
