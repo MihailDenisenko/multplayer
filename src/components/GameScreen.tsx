@@ -161,8 +161,8 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
         // Восстанавливаем форму, если локальная анимация была прервана фоновой вкладкой.
         resetFormFor(sheet);
         setPhase("form");
-      } else if (sheet.sheetId !== localSheetId && phase === "waiting") {
-        // Пока мы ждали — к нам прилетел новый листок.
+      } else if (sheet.sheetId !== localSheetId) {
+        // Сервер уже передал старый лист: принимаем новый даже после потерянного submit-ответа.
         setPhase("animating");
         const scene = sceneRef.current;
         const run = async () => {
@@ -285,7 +285,9 @@ export default function GameScreen({ state, token, onError, onState }: Props) {
       }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Не удалось отправить данные");
-      setPhase("form");
+      // Ответ мог потеряться уже после commit на сервере. Polling определит,
+      // остался ли старый лист у игрока, и безопасно восстановит нужную форму.
+      setPhase("waiting");
     } finally {
       setSubmitting(false);
     }
